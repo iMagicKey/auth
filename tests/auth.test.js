@@ -226,6 +226,34 @@ describe('hasPermission', () => {
     it('returns true when required array is empty (vacuously true)', () => {
         expect(hasPermission(['users:read'], [])).to.equal(true)
     })
+
+    it('glob prefix.* matches direct child', () => {
+        expect(hasPermission(['admin.*'], 'admin.settings')).to.equal(true)
+    })
+
+    it('glob prefix.* matches nested child', () => {
+        expect(hasPermission(['admin.*'], 'admin.users.delete')).to.equal(true)
+    })
+
+    it('glob prefix.* matches the prefix itself', () => {
+        expect(hasPermission(['admin.*'], 'admin')).to.equal(true)
+    })
+
+    it('glob prefix.* does not match unrelated permission', () => {
+        expect(hasPermission(['admin.*'], 'users.read')).to.equal(false)
+    })
+
+    it('glob prefix.* does not match partial prefix', () => {
+        expect(hasPermission(['admin.*'], 'administrator.read')).to.equal(false)
+    })
+
+    it('glob works alongside exact permissions', () => {
+        expect(hasPermission(['admin.*', 'reports:view'], ['admin.settings', 'reports:view'])).to.equal(true)
+    })
+
+    it('glob does not grant access to sibling namespaces', () => {
+        expect(hasPermission(['users.*'], 'admin.settings')).to.equal(false)
+    })
 })
 
 describe('hasAnyPermission', () => {
@@ -253,5 +281,13 @@ describe('hasAnyPermission', () => {
     it('returns false for non-array userPermissions', () => {
         expect(hasAnyPermission(null, 'users:read')).to.equal(false)
         expect(hasAnyPermission(undefined, ['users:read'])).to.equal(false)
+    })
+
+    it('glob prefix.* matches any child in hasAnyPermission', () => {
+        expect(hasAnyPermission(['admin.*'], ['admin.settings', 'users:delete'])).to.equal(true)
+    })
+
+    it('glob does not match unrelated in hasAnyPermission', () => {
+        expect(hasAnyPermission(['users.*'], ['admin.settings', 'posts:delete'])).to.equal(false)
     })
 })
