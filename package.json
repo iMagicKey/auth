@@ -1,7 +1,7 @@
 {
   "name": "imagic-auth",
   "version": "1.0.1",
-  "description": "JWT signing/verification, API key utilities, and permission checking for Node.js",
+  "description": "Sign and verify JWTs, generate and validate API keys, and check user permissions",
   "type": "module",
   "exports": {
     ".": "./src/index.js",

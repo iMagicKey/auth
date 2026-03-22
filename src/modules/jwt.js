@@ -26,7 +26,10 @@ export function sign(payload, secret, options = {}) {
     const now = Math.floor(Date.now() / 1000)
     const claims = { ...payload, iat: now }
     if (options.expiresIn != null) {
-        claims.exp = now + options.expiresIn
+        if (!Number.isFinite(options.expiresIn) || options.expiresIn <= 0) {
+            throw new TypeError('expiresIn must be a positive finite number')
+        }
+        claims.exp = Math.floor(Date.now() / 1000) + options.expiresIn
     }
 
     const headerEncoded = base64urlEncode(Buffer.from(JSON.stringify(header)))
@@ -87,8 +90,12 @@ export function decode(token) {
     if (typeof token !== 'string') throw new TypeError('token must be a string')
     const parts = token.split('.')
     if (parts.length !== 3) throw new Error('Invalid token format')
-    return {
-        header: JSON.parse(base64urlDecode(parts[0]).toString('utf8')),
-        payload: JSON.parse(base64urlDecode(parts[1]).toString('utf8')),
+    try {
+        return {
+            header: JSON.parse(base64urlDecode(parts[0]).toString('utf8')),
+            payload: JSON.parse(base64urlDecode(parts[1]).toString('utf8')),
+        }
+    } catch {
+        throw new Error('Invalid token format')
     }
 }

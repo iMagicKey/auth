@@ -30,9 +30,15 @@ describe('sign / verify', () => {
         expect(payload.exp - payload.iat).to.equal(3600)
     })
 
-    it('expired token throws "Token expired"', () => {
-        const token = sign({ x: 1 }, SECRET, { expiresIn: -1 })
-        expect(() => verify(token, SECRET)).to.throw('Token expired')
+    it('expired token throws "Token expired"', async () => {
+        // Construct a token with exp in the past manually (bypassing sign validation)
+        const base64urlEncode = (str) => Buffer.from(str).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+        const { createHmac } = await import('node:crypto')
+        const headerPart = base64urlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+        const payloadPart = base64urlEncode(JSON.stringify({ x: 1, iat: 1, exp: 1 }))
+        const signingInput = `${headerPart}.${payloadPart}`
+        const sig = createHmac('sha256', SECRET).update(signingInput).digest('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+        expect(() => verify(`${signingInput}.${sig}`, SECRET)).to.throw('Token expired')
     })
 
     it('tampered signature throws "Invalid signature"', () => {
@@ -64,6 +70,18 @@ describe('sign / verify', () => {
         expect(() => sign(42, SECRET)).to.throw(TypeError)
     })
 
+    it('sign throws TypeError when expiresIn is NaN', () => {
+        expect(() => sign({ x: 1 }, SECRET, { expiresIn: NaN })).to.throw(TypeError, 'expiresIn must be a positive finite number')
+    })
+
+    it('sign throws TypeError when expiresIn is negative', () => {
+        expect(() => sign({ x: 1 }, SECRET, { expiresIn: -1 })).to.throw(TypeError, 'expiresIn must be a positive finite number')
+    })
+
+    it('sign throws TypeError when expiresIn is Infinity', () => {
+        expect(() => sign({ x: 1 }, SECRET, { expiresIn: Infinity })).to.throw(TypeError, 'expiresIn must be a positive finite number')
+    })
+
     it('verify throws TypeError for non-string token', () => {
         expect(() => verify(123, SECRET)).to.throw(TypeError)
         expect(() => verify(null, SECRET)).to.throw(TypeError)
@@ -84,8 +102,15 @@ describe('decode', () => {
         expect(payload.userId).to.equal(99)
     })
 
-    it('does not throw on expired token', () => {
-        const token = sign({ x: 1 }, SECRET, { expiresIn: -1 })
+    it('does not throw on expired token', async () => {
+        // Construct a token with exp in the past manually (bypassing sign validation)
+        const base64urlEncode = (str) => Buffer.from(str).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+        const { createHmac } = await import('node:crypto')
+        const headerPart = base64urlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+        const payloadPart = base64urlEncode(JSON.stringify({ x: 1, iat: 1, exp: 1 }))
+        const signingInput = `${headerPart}.${payloadPart}`
+        const sig = createHmac('sha256', SECRET).update(signingInput).digest('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+        const token = `${signingInput}.${sig}`
         expect(() => decode(token)).to.not.throw()
         const { payload } = decode(token)
         expect(payload.exp).to.be.a('number')
@@ -99,6 +124,15 @@ describe('decode', () => {
     it('throws on invalid token format', () => {
         expect(() => decode('onlyone')).to.throw('Invalid token format')
         expect(() => decode('a.b')).to.throw('Invalid token format')
+    })
+
+    it('throws on invalid JSON in payload (corrupted base64)', () => {
+        // Construct a token where payload part decodes to non-JSON bytes
+        const base64urlEncode = (str) => Buffer.from(str).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+        const headerPart = base64urlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+        // invalid JSON payload
+        const badPayload = Buffer.from('{ not valid json !!!').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+        expect(() => decode(`${headerPart}.${badPayload}.fakesig`)).to.throw('Invalid token format')
     })
 })
 
