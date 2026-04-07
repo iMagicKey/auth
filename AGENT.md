@@ -159,3 +159,14 @@ hasAnyPermission(['*'], ['x', 'y', 'z'])   // true
 - **API key lookup strategy**: `validateApiKey` does not query a database. You must implement a lookup strategy (e.g., store a hash prefix as an index, or iterate all keys if the dataset is small).
 - **`hasPermission` / `hasAnyPermission` are case-sensitive**: `'Admin'` and `'admin'` are different permissions.
 - **`'*'` wildcard is a literal string**: it must be an element of the `userPermissions` array, not a glob pattern.
+
+---
+
+## Knowledge Base
+
+**KB tags for this library:** `imagic-auth, authentication, jwt`
+
+Before COMPLEX tasks — invoke `knowledge-reader` with tags above + task-specific tags.
+After completing a task — if a reusable pattern, error, or decision emerged, invoke `knowledge-writer` with `source: imagic-auth`.
+
+See `CLAUDE.md` §Knowledge Base Protocol for the full workflow.

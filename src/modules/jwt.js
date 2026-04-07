@@ -6,9 +6,9 @@ function base64urlEncode(buf) {
 }
 
 function base64urlDecode(str) {
-    str = str.replace(/-/g, '+').replace(/_/g, '/')
-    while (str.length % 4) str += '='
-    return Buffer.from(str, 'base64')
+    let s = str.replace(/-/g, '+').replace(/_/g, '/')
+    while (s.length % 4) s += '='
+    return Buffer.from(s, 'base64')
 }
 
 /**

@@ -10,7 +10,7 @@ function matchPermission(userPerm, required) {
     if (userPerm === required) return true
     if (userPerm.endsWith('.*')) {
         const prefix = userPerm.slice(0, -2)
-        return required === prefix || required.startsWith(prefix + '.')
+        return required === prefix || required.startsWith(`${prefix}.`)
     }
     return false
 }
