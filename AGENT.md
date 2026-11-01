@@ -17,11 +17,12 @@ Provides JWT signing/verification (HMAC-SHA256, no third-party deps), cryptograp
 
 ### `sign(payload, secret, options?): string`
 
-- `payload` {object} — plain object to embed in the token; must not be null or an array
+- `payload` {object} — plain object to embed in the token (prototype `Object.prototype` or `null`, no `toJSON` function); for a class instance pass `doc.toObject()` or an explicit copy
 - `secret` {string} — non-empty HMAC signing key
-- `options.expiresIn` {number} [undefined] — expiry in **seconds** from now; adds `exp` claim
+- `options.expiresIn` {number} [undefined] — expiry in **seconds** from now; adds `exp` claim; a fractional value rounds up to a whole second
 - returns: JWT string (`header.payload.signature`, base64url-encoded)
 - throws: `TypeError` — if `secret` is not a non-empty string or `payload` is not a plain object
+- throws: `TypeError` — if `payload.exp` or `payload.nbf` is not a finite number, or the token would exceed 1 MiB
 - always adds `iat` claim (current Unix timestamp in seconds)
 
 ### `verify(token, secret): object`
@@ -29,10 +30,13 @@ Provides JWT signing/verification (HMAC-SHA256, no third-party deps), cryptograp
 - `token` {string} — JWT string to verify
 - `secret` {string} — signing secret used during `sign`
 - returns: decoded payload object (includes `iat`, and `exp` if set)
-- throws: `Error('Invalid token format')` — not a 3-part JWT
+- throws: `Error('Invalid token format')` — not a 3-part JWT, a segment is empty or not strict unpadded base64url, or the token exceeds 1 MiB
 - throws: `Error('Invalid signature')` — HMAC mismatch
-- throws: `Error('Token expired')` — current time is past `exp`
-- throws: `Error('Invalid token payload')` — payload cannot be base64url-decoded or JSON-parsed
+- throws: `Error('Invalid token header')` — header is not a JSON object, `alg` is not exactly `HS256`, or `crit` is present
+- throws: `Error('Invalid token payload')` — payload cannot be decoded, is not a JSON object, or has an `exp` or `nbf` that is not a finite number
+- throws: `Error('Token expired')` — current time is at or past `exp`
+- throws: `Error('Token not yet valid')` — current time is before `nbf`
+- a token with no `exp` or `nbf` is accepted
 
 ### `decode(token): { header: object, payload: object }`
 
@@ -69,8 +73,8 @@ Provides JWT signing/verification (HMAC-SHA256, no third-party deps), cryptograp
 - `userPermissions` {string[]} — array of permission strings the user holds
 - `required` {string | string[]} — one or more permissions that must all be present
 - returns: `true` only if **all** required permissions are in `userPermissions`
-- `'*'` in `userPermissions` grants all permissions
-- returns `false` if `userPermissions` is not an array
+- `'*'` in `userPermissions` grants every valid requirement
+- returns `false` if `userPermissions` is not an array of strings, or `required` is not a string or an array of strings, even for a `'*'` holder
 - throws: never
 
 ### `hasAnyPermission(userPermissions, required): boolean`
@@ -78,8 +82,8 @@ Provides JWT signing/verification (HMAC-SHA256, no third-party deps), cryptograp
 - `userPermissions` {string[]} — array of permission strings the user holds
 - `required` {string | string[]} — one or more permissions; at least one must be present
 - returns: `true` if **any** of the required permissions is in `userPermissions`
-- `'*'` in `userPermissions` grants all permissions
-- returns `false` if `userPermissions` is not an array
+- `'*'` in `userPermissions` grants every valid requirement
+- returns `false` if `userPermissions` is not an array of strings, or `required` is not a string or an array of strings, even for a `'*'` holder
 - throws: never
 
 ## Usage Patterns
@@ -95,7 +99,7 @@ try {
     const payload = verify(token, process.env.JWT_SECRET)
     console.log(payload.userId) // 42
 } catch (err) {
-    // 'Invalid signature' | 'Token expired' | 'Invalid token format'
+    // 'Invalid token format' | 'Invalid signature' | 'Invalid token header' | 'Invalid token payload' | 'Token expired' | 'Token not yet valid'
     console.error(err.message)
 }
 ```
@@ -152,10 +156,11 @@ hasAnyPermission(['*'], ['x', 'y', 'z'])   // true
 
 ## Constraints / Gotchas
 
-- **Algorithm is fixed**: always HMAC-SHA256. There is no option to choose RS256 or other algorithms.
+- **Algorithm is fixed**: always HMAC-SHA256. There is no option to choose RS256 or other algorithms. `verify` rejects any token whose `alg` is not exactly `HS256`, even with a valid HMAC.
 - **`sign` adds `iat` unconditionally**: the issued-at claim is always present in the payload. Do not rely on its absence.
 - **`expiresIn` is in seconds**, not milliseconds. Passing millisecond values (e.g. `3600000`) will create tokens that expire far in the future.
 - **`verify` does not accept expired tokens**: there is no `ignoreExpiration` option. Use `decode` if you need to inspect an expired token.
+- **Tokens that `verify` rejects despite a valid HMAC**: another or missing `alg`, `crit` present, a non-numeric `exp` or `nbf`, use before `nbf`, use at or after `exp`. Older versions accepted all of these, and accepted a token until one second after `exp`.
 - **`validateApiKey` never throws**: it silently returns `false` on empty strings, type mismatches, or hash length mismatch. Check that both `key` and `storedHash` are non-empty strings before calling if you need to distinguish "wrong key" from "bad arguments".
 - **`hashApiKey` is deterministic**: the same key + secret always produces the same hash. This is intentional for validation, but means you cannot use it to generate unique IDs.
 - **API key lookup strategy**: `validateApiKey` does not query a database. You must implement a lookup strategy (e.g., store a hash prefix as an index, or iterate all keys if the dataset is small).
