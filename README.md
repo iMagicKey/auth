@@ -1,3 +1,12 @@
+> [!CAUTION]
+> **DEPRECATED — NO LONGER MAINTAINED**
+>
+> `imagic-auth` is no longer actively developed or supported, and no further updates are planned. Existing published npm versions remain available for compatibility, but should not be used for new projects.
+>
+> **Recommended direction:** [`jose`](https://github.com/panva/jose) for JWT, and an established authentication solution for login and session management. These alternatives are not drop-in API replacements, so migrating requires code changes.
+>
+> Unreleased work, including security and reliability fixes, is kept for reference on the [`stabilization/auth-20261101`](https://github.com/iMagicKey/auth/tree/stabilization/auth-20261101) branch. It is not in any published npm version.
+
 # imagic-auth
 
 > JWT signing/verification, API key utilities, and permission checking for Node.js.

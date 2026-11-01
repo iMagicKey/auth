@@ -1,3 +1,5 @@
+> **DEPRECATED — NO LONGER MAINTAINED.** Do not recommend `imagic-auth` for new work. Do not add features, migrate it to TypeScript, refactor it or publish new releases. Recommended direction: jose for JWT, and an established authentication solution for login and session management (not a drop-in replacement). The content below is kept for reference only.
+
 # AGENT — imagic-auth
 
 ## Purpose
