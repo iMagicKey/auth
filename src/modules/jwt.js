@@ -11,6 +11,11 @@ function base64urlDecode(str) {
     return Buffer.from(s, 'base64')
 }
 
+// RFC 7519 section 2: a NumericDate is a JSON number. JSON.parse reads 1e999 as Infinity, which must not mean "never expires".
+function isNumericDate(value) {
+    return typeof value === 'number' && Number.isFinite(value)
+}
+
 /**
  * Signs a payload and returns a JWT string.
  * @param {object} payload
@@ -29,7 +34,13 @@ export function sign(payload, secret, options = {}) {
         if (!Number.isFinite(options.expiresIn) || options.expiresIn <= 0) {
             throw new TypeError('expiresIn must be a positive finite number')
         }
-        claims.exp = Math.floor(Date.now() / 1000) + options.expiresIn
+        // iat is rounded down, so exp is rounded up: a fractional expiresIn must not produce an already-expired token.
+        claims.exp = now + Math.ceil(options.expiresIn)
+    }
+    for (const claim of ['exp', 'nbf']) {
+        if (claims[claim] !== undefined && !isNumericDate(claims[claim])) {
+            throw new TypeError(`${claim} must be a finite number`)
+        }
     }
 
     const headerEncoded = base64urlEncode(Buffer.from(JSON.stringify(header)))
@@ -73,9 +84,19 @@ export function verify(token, secret) {
         throw new Error('Invalid token payload')
     }
 
-    const now = Math.floor(Date.now() / 1000)
-    if (payload.exp != null && payload.exp < now) {
-        throw new Error('Token expired')
+    // Not floored, so that a non-integer exp or nbf is compared at its real precision.
+    const now = Date.now() / 1000
+
+    // RFC 7519 section 4.1.4: the current time MUST be before exp.
+    if (Object.hasOwn(payload, 'exp')) {
+        if (!isNumericDate(payload.exp)) throw new Error('Invalid token payload')
+        if (now >= payload.exp) throw new Error('Token expired')
+    }
+
+    // RFC 7519 section 4.1.5: the current time MUST be at or after nbf.
+    if (Object.hasOwn(payload, 'nbf')) {
+        if (!isNumericDate(payload.nbf)) throw new Error('Invalid token payload')
+        if (now < payload.nbf) throw new Error('Token not yet valid')
     }
 
     return payload
