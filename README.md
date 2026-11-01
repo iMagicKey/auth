@@ -48,11 +48,11 @@ Signs `payload` with HMAC-SHA256 and returns a JWT string (header.payload.signat
 |-----------|------|-------------|
 | `payload` | `object` | Data to embed; must be a plain object |
 | `secret` | `string` | Non-empty signing secret |
-| `options.expiresIn` | `number` | Expiry in **seconds** from now. Adds `exp` claim. |
+| `options.expiresIn` | `number` | Expiry in **seconds** from now. Adds `exp` claim. A fractional value rounds up to a whole second. |
 
 Always adds an `iat` (issued-at) claim set to the current Unix timestamp.
 
-Throws `TypeError` if `secret` is not a non-empty string or `payload` is not an object.
+Throws `TypeError` if `secret` is not a non-empty string, `payload` is not an object, `payload.exp` or `payload.nbf` is not a finite number, or the token would exceed 1 MiB, the limit `verify` accepts.
 
 ---
 
@@ -62,14 +62,20 @@ Throws `TypeError` if `secret` is not a non-empty string or `payload` is not an 
 verify(token: string, secret: string): Record<string, unknown>
 ```
 
-Verifies the token signature and expiry. Returns the decoded payload on success.
+Verifies the token structure, signature, header and time claims. Returns the decoded payload on success.
 
 | Throws | When |
 |--------|------|
-| `Error('Invalid token format')` | Token is not a 3-part JWT string |
+| `Error('Invalid token format')` | Token is not a 3-part JWT string, a segment is empty or not strict unpadded base64url, or the token exceeds 1 MiB |
 | `Error('Invalid signature')` | Signature does not match |
-| `Error('Token expired')` | `exp` claim is in the past |
-| `Error('Invalid token payload')` | Payload cannot be decoded |
+| `Error('Invalid token header')` | Header is not a JSON object, `alg` is not exactly `HS256`, or `crit` is present |
+| `Error('Invalid token payload')` | Payload cannot be decoded, is not a JSON object, or has an `exp` or `nbf` that is not a finite number |
+| `Error('Token expired')` | Current time is at or past `exp` |
+| `Error('Token not yet valid')` | Current time is before `nbf` |
+
+A token with no `exp` or `nbf` is accepted.
+
+**Tokens rejected despite a valid HMAC:** these checks can reject a token that older versions accepted, if it was issued elsewhere or with custom claims and has another or missing `alg`, a `crit` parameter, or a non-numeric `exp` or `nbf`, or if it is used before its `nbf`. Every token with an `exp`, including those from `sign`, now stops being accepted at `exp`, not one second later.
 
 ---
 
@@ -138,8 +144,8 @@ hasPermission(userPermissions: string[], required: string | string[]): boolean
 
 Returns `true` if the user holds **all** of the required permissions.
 
-- `'*'` in `userPermissions` grants everything.
-- Returns `false` if `userPermissions` is not an array.
+- `'*'` in `userPermissions` grants every valid requirement.
+- Returns `false` if `userPermissions` is not an array of strings, or `required` is not a string or an array of strings, even for a `'*'` holder.
 
 ```js
 hasPermission(['posts:read', 'posts:write'], ['posts:read', 'posts:write']) // true
@@ -157,8 +163,8 @@ hasAnyPermission(userPermissions: string[], required: string | string[]): boolea
 
 Returns `true` if the user holds **at least one** of the required permissions.
 
-- `'*'` in `userPermissions` grants everything.
-- Returns `false` if `userPermissions` is not an array.
+- `'*'` in `userPermissions` grants every valid requirement.
+- Returns `false` if `userPermissions` is not an array of strings, or `required` is not a string or an array of strings, even for a `'*'` holder.
 
 ```js
 hasAnyPermission(['posts:read'], ['posts:read', 'posts:write']) // true
@@ -169,8 +175,9 @@ hasAnyPermission(['comments:read'], 'posts:write')             // false
 
 | Function | Throws | When |
 |----------|--------|------|
-| `sign` | `TypeError` | `secret` is empty or `payload` is not an object |
-| `verify` | `Error` | Invalid format, wrong signature, expired, bad payload |
+| `sign` | `TypeError` | `secret` is empty, `payload` is not an object, `exp` or `nbf` is not a finite number, or the token would exceed 1 MiB |
+| `verify` | `TypeError` | `secret` is empty or `token` is not a string |
+| `verify` | `Error` | Invalid format, wrong signature, bad header, bad payload, expired, not yet valid |
 | `decode` | `TypeError` | `token` is not a string |
 | `decode` | `Error` | Invalid JWT format |
 | `hashApiKey` | `TypeError` | `key` or `secret` is empty |
