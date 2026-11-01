@@ -14,24 +14,34 @@ function base64urlDecode(str) {
 // The only algorithm this library signs and verifies with. Nothing in a token can select another one.
 const ALGORITHM = 'HS256'
 
+// Far beyond what any HTTP header carries. Bounds the work verify does on untrusted input before the signature is checked.
+const MAX_TOKEN_LENGTH = 1024 * 1024
+
 // RFC 7519 section 2: a NumericDate is a JSON number. JSON.parse reads 1e999 as Infinity, which must not mean "never expires".
 function isNumericDate(value) {
     return typeof value === 'number' && Number.isFinite(value)
 }
 
+// RFC 7515 section 5.2: no padding, whitespace or other additional characters. A length of 4n + 1 is not valid base64.
+function isBase64urlSegment(segment) {
+    return /^[A-Za-z0-9_-]+$/.test(segment) && segment.length % 4 !== 1
+}
+
+// RFC 7519 section 7.2: the header and the claims set must both be JSON objects. Returns null for anything else.
+function decodeJsonObject(segment) {
+    let value
+    try {
+        value = JSON.parse(base64urlDecode(segment).toString('utf8'))
+    } catch {
+        return null
+    }
+    return typeof value === 'object' && value !== null && !Array.isArray(value) ? value : null
+}
+
 // RFC 8725 section 3.1: alg must match the algorithm used to verify. RFC 7515 section 4.1.11: crit lists extensions
 // the recipient must understand, and this library supports none.
-function assertValidHeader(headerEncoded) {
-    let header
-    try {
-        header = JSON.parse(base64urlDecode(headerEncoded).toString('utf8'))
-    } catch {
-        throw new Error('Invalid token header')
-    }
-    const isObject = typeof header === 'object' && header !== null && !Array.isArray(header)
-    if (!isObject || !Object.hasOwn(header, 'alg') || header.alg !== ALGORITHM || Object.hasOwn(header, 'crit')) {
-        throw new Error('Invalid token header')
-    }
+function isValidHeader(header) {
+    return header !== null && Object.hasOwn(header, 'alg') && header.alg === ALGORITHM && !Object.hasOwn(header, 'crit')
 }
 
 /**
@@ -66,7 +76,9 @@ export function sign(payload, secret, options = {}) {
     const signingInput = `${headerEncoded}.${payloadEncoded}`
     const signature = base64urlEncode(createHmac('sha256', secret).update(signingInput).digest())
 
-    return `${signingInput}.${signature}`
+    const token = `${signingInput}.${signature}`
+    if (token.length > MAX_TOKEN_LENGTH) throw new TypeError('payload is too large to produce a verifiable token')
+    return token
 }
 
 /**
@@ -74,14 +86,16 @@ export function sign(payload, secret, options = {}) {
  * @param {string} token
  * @param {string} secret
  * @returns {object} decoded payload
- * @throws {Error} if invalid or expired
+ * @throws {Error} if invalid, expired or not yet valid
  */
 export function verify(token, secret) {
     if (!secret || typeof secret !== 'string') throw new TypeError('secret must be a non-empty string')
     if (typeof token !== 'string') throw new TypeError('token must be a string')
 
-    const parts = token.split('.')
-    if (parts.length !== 3) throw new Error('Invalid token format')
+    if (token.length > MAX_TOKEN_LENGTH) throw new Error('Invalid token format')
+
+    const parts = token.split('.', 4)
+    if (parts.length !== 3 || !parts.every(isBase64urlSegment)) throw new Error('Invalid token format')
 
     const [headerEncoded, payloadEncoded, signatureEncoded] = parts
     const signingInput = `${headerEncoded}.${payloadEncoded}`
@@ -96,14 +110,10 @@ export function verify(token, secret) {
     }
 
     // The signature is checked first, so that nothing unauthenticated gets parsed.
-    assertValidHeader(headerEncoded)
+    if (!isValidHeader(decodeJsonObject(headerEncoded))) throw new Error('Invalid token header')
 
-    let payload
-    try {
-        payload = JSON.parse(base64urlDecode(payloadEncoded).toString('utf8'))
-    } catch {
-        throw new Error('Invalid token payload')
-    }
+    const payload = decodeJsonObject(payloadEncoded)
+    if (payload === null) throw new Error('Invalid token payload')
 
     // Not floored, so that a non-integer exp or nbf is compared at its real precision.
     const now = Date.now() / 1000
