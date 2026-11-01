@@ -22,6 +22,13 @@ function isNumericDate(value) {
     return typeof value === 'number' && Number.isFinite(value)
 }
 
+// Spreading anything else into the claims silently loses data: class getters, Map and Date contents, inherited values.
+function isPlainObject(value) {
+    if (typeof value !== 'object' || value === null) return false
+    const prototype = Object.getPrototypeOf(value)
+    return prototype === Object.prototype || prototype === null
+}
+
 // RFC 7515 section 5.2: no padding, whitespace or other additional characters. A length of 4n + 1 is not valid base64.
 function isBase64urlSegment(segment) {
     return /^[A-Za-z0-9_-]+$/.test(segment) && segment.length % 4 !== 1
@@ -46,18 +53,21 @@ function isValidHeader(header) {
 
 /**
  * Signs a payload and returns a JWT string.
- * @param {object} payload
+ * @param {object} payload - a plain object with no toJSON function
  * @param {string} secret
  * @param {object} options - { expiresIn: number (seconds) }
  * @returns {string} JWT token
  */
 export function sign(payload, secret, options = {}) {
     if (!secret || typeof secret !== 'string') throw new TypeError('secret must be a non-empty string')
-    if (typeof payload !== 'object' || payload === null) throw new TypeError('payload must be an object')
+    if (!isPlainObject(payload)) throw new TypeError('payload must be a plain object')
 
     const header = { alg: ALGORITHM, typ: 'JWT' }
     const now = Math.floor(Date.now() / 1000)
     const claims = { ...payload, iat: now }
+    // JSON.stringify would serialize what toJSON returns instead of these claims, dropping iat and exp. Checked on the
+    // copy, so that a getter is read only once and cannot pass this check and then return a function.
+    if (typeof claims.toJSON === 'function') throw new TypeError('payload must not have a toJSON function')
     if (options.expiresIn != null) {
         if (!Number.isFinite(options.expiresIn) || options.expiresIn <= 0) {
             throw new TypeError('expiresIn must be a positive finite number')

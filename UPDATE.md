@@ -14,11 +14,13 @@
 ## Security hardening
 
 - [ ] Enforce or warn on a minimum secret length; one-character secrets are accepted (audit AU-03, RFC 8725 section 3.5)
-- [ ] `generateApiKey({ length: 0 })` returns an empty string, and a stored hash with trailing non-hex characters still validates (audit AU-05)
+- [ ] `generateApiKey` accepts `{ length: 0 }`, which returns an empty string, and `{ length: 1 }`, which returns two hex characters (audit AU-05)
+- [ ] `validateApiKey` accepts malformed stored hashes: trailing non-hex characters (`hash + 'zz'`), an odd trailing nibble, and uppercase hex (audit AU-05)
+- [ ] `validateApiKey` accepts a Buffer, Uint8Array or byte array as the stored hash, although the README says wrong types return false
+- [ ] Lone-surrogate secrets collide: `verify(sign(x, '\ud800'), '\ud801')` succeeds, because both encode to U+FFFD
+- [ ] `hasPermission` and `hasAnyPermission` throw on a revoked Proxy or an array with a throwing getter, although the README says never; access is still denied because no `true` is returned
 - [ ] `decode` still parses base64url leniently, has no size limit and returns non-object headers and payloads, although its docs promise objects
 - [ ] `verify` replaces invalid UTF-8 in a signed segment instead of rejecting it (RFC 7519 section 7.2)
-- [ ] `sign` accepts an array payload and spreads it into an object, although AGENT.md says it throws
-- [ ] `sign` issues a token that `verify` rejects when the payload has its own `toJSON` returning a non-object
 
 ---
 

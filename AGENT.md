@@ -15,7 +15,7 @@ Provides JWT signing/verification (HMAC-SHA256, no third-party deps), cryptograp
 
 ### `sign(payload, secret, options?): string`
 
-- `payload` {object} — plain object to embed in the token; must not be null or an array
+- `payload` {object} — plain object to embed in the token (prototype `Object.prototype` or `null`, no `toJSON` function); for a class instance pass `doc.toObject()` or an explicit copy
 - `secret` {string} — non-empty HMAC signing key
 - `options.expiresIn` {number} [undefined] — expiry in **seconds** from now; adds `exp` claim; a fractional value rounds up to a whole second
 - returns: JWT string (`header.payload.signature`, base64url-encoded)

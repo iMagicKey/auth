@@ -46,13 +46,15 @@ Signs `payload` with HMAC-SHA256 and returns a JWT string (header.payload.signat
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `payload` | `object` | Data to embed; must be a plain object |
+| `payload` | `object` | Data to embed; must be a plain object (prototype `Object.prototype` or `null`) with no `toJSON` function |
 | `secret` | `string` | Non-empty signing secret |
 | `options.expiresIn` | `number` | Expiry in **seconds** from now. Adds `exp` claim. A fractional value rounds up to a whole second. |
 
 Always adds an `iat` (issued-at) claim set to the current Unix timestamp.
 
-Throws `TypeError` if `secret` is not a non-empty string, `payload` is not an object, `payload.exp` or `payload.nbf` is not a finite number, or the token would exceed 1 MiB, the limit `verify` accepts.
+Throws `TypeError` if `secret` is not a non-empty string, `payload` is not a plain object or has a `toJSON` function, `payload.exp` or `payload.nbf` is not a finite number, or the token would exceed 1 MiB, the limit `verify` accepts.
+
+Class instances, arrays, `Date` and `Map` are rejected, because serializing them could drop `iat` and `exp`, leaving a token that never expires. Pass a plain object instead, for example `doc.toObject()` or an explicit copy such as `{ sub: doc.id }`.
 
 ---
 
@@ -175,7 +177,7 @@ hasAnyPermission(['comments:read'], 'posts:write')             // false
 
 | Function | Throws | When |
 |----------|--------|------|
-| `sign` | `TypeError` | `secret` is empty, `payload` is not an object, `exp` or `nbf` is not a finite number, or the token would exceed 1 MiB |
+| `sign` | `TypeError` | `secret` is empty, `payload` is not a plain object or has a `toJSON` function, `exp` or `nbf` is not a finite number, or the token would exceed 1 MiB |
 | `verify` | `TypeError` | `secret` is empty or `token` is not a string |
 | `verify` | `Error` | Invalid format, wrong signature, bad header, bad payload, expired, not yet valid |
 | `decode` | `TypeError` | `token` is not a string |
