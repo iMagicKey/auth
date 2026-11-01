@@ -11,9 +11,27 @@ function base64urlDecode(str) {
     return Buffer.from(s, 'base64')
 }
 
+// The only algorithm this library signs and verifies with. Nothing in a token can select another one.
+const ALGORITHM = 'HS256'
+
 // RFC 7519 section 2: a NumericDate is a JSON number. JSON.parse reads 1e999 as Infinity, which must not mean "never expires".
 function isNumericDate(value) {
     return typeof value === 'number' && Number.isFinite(value)
+}
+
+// RFC 8725 section 3.1: alg must match the algorithm used to verify. RFC 7515 section 4.1.11: crit lists extensions
+// the recipient must understand, and this library supports none.
+function assertValidHeader(headerEncoded) {
+    let header
+    try {
+        header = JSON.parse(base64urlDecode(headerEncoded).toString('utf8'))
+    } catch {
+        throw new Error('Invalid token header')
+    }
+    const isObject = typeof header === 'object' && header !== null && !Array.isArray(header)
+    if (!isObject || !Object.hasOwn(header, 'alg') || header.alg !== ALGORITHM || Object.hasOwn(header, 'crit')) {
+        throw new Error('Invalid token header')
+    }
 }
 
 /**
@@ -27,7 +45,7 @@ export function sign(payload, secret, options = {}) {
     if (!secret || typeof secret !== 'string') throw new TypeError('secret must be a non-empty string')
     if (typeof payload !== 'object' || payload === null) throw new TypeError('payload must be an object')
 
-    const header = { alg: 'HS256', typ: 'JWT' }
+    const header = { alg: ALGORITHM, typ: 'JWT' }
     const now = Math.floor(Date.now() / 1000)
     const claims = { ...payload, iat: now }
     if (options.expiresIn != null) {
@@ -76,6 +94,9 @@ export function verify(token, secret) {
     if (expectedBuf.length !== actualBuf.length || !timingSafeEqual(expectedBuf, actualBuf)) {
         throw new Error('Invalid signature')
     }
+
+    // The signature is checked first, so that nothing unauthenticated gets parsed.
+    assertValidHeader(headerEncoded)
 
     let payload
     try {
