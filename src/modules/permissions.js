@@ -1,3 +1,12 @@
+// Uses for...of because Array.prototype.every skips the holes of a sparse array, which would let new Array(3) pass.
+function isStringArray(value) {
+    if (!Array.isArray(value)) return false
+    for (const item of value) {
+        if (typeof item !== 'string') return false
+    }
+    return true
+}
+
 /**
  * Checks if a single user permission entry matches the required permission.
  * Supports exact match and glob-style 'prefix.*' notation.
@@ -27,10 +36,10 @@ function matchPermission(userPerm, required) {
  * @returns {boolean}
  */
 export function hasPermission(userPermissions, required) {
-    if (!Array.isArray(userPermissions)) return false
+    const requiredList = Array.isArray(required) ? required : [required]
+    if (!isStringArray(userPermissions) || !isStringArray(requiredList)) return false
     if (userPermissions.includes('*')) return true
 
-    const requiredList = Array.isArray(required) ? required : [required]
     return requiredList.every((perm) => userPermissions.some((up) => matchPermission(up, perm)))
 }
 
@@ -43,9 +52,9 @@ export function hasPermission(userPermissions, required) {
  * @returns {boolean}
  */
 export function hasAnyPermission(userPermissions, required) {
-    if (!Array.isArray(userPermissions)) return false
+    const requiredList = Array.isArray(required) ? required : [required]
+    if (!isStringArray(userPermissions) || !isStringArray(requiredList)) return false
     if (userPermissions.includes('*')) return true
 
-    const requiredList = Array.isArray(required) ? required : [required]
     return requiredList.some((perm) => userPermissions.some((up) => matchPermission(up, perm)))
 }
